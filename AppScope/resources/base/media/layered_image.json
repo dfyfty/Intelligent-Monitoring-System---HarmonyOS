@@ -1,0 +1,7 @@
+{
+  "layered-image":
+  {
+    "background" : "$media:favicon_1024",
+    "foreground" : "$media:fav_foreground"
+  }
+}
