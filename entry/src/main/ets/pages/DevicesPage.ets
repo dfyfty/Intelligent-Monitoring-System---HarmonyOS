@@ -329,29 +329,32 @@ export struct DevicesPage {
   }
 
   private onDeviceCardTapped(rawId: string): void {
-    const normalizedId = (rawId || '').trim().toUpperCase();
-    if (!normalizedId) {
-      promptAction.showToast({ message: '设备ID无效' });
-      return;
+    try {
+      const normalizedId = (rawId || '').trim().toUpperCase();
+      if (!normalizedId) {
+        promptAction.showToast({ message: '设备ID无效' });
+        return;
+      }
+
+      // 查找设备信息以获取设备名称
+      const device = this.devices.find(d =>
+        (d.id || d.device_id || '').trim().toUpperCase() === normalizedId
+      );
+      const deviceName = device?.name || `设备 ${normalizedId}`;
+
+      // 跳转到详情页，传递设备ID和名称
+      const pathInfo: NavPathInfo = {
+        name: "DeviceDetailPage",
+        param: {
+          "deviceId": normalizedId,
+          "deviceName": deviceName
+        } as Record<string, string>
+      };
+
+      this.pageStack.pushPath(pathInfo);
+    } catch (err) {
+      console.error('设备卡片点击处理失败:', err);
     }
-
-    // 查找设备信息以获取设备名称
-    const device = this.devices.find(d => 
-      (d.id || d.device_id || '').trim().toUpperCase() === normalizedId
-    );
-    const deviceName = device?.name || `设备 ${normalizedId}`;
-
-    // 跳转到详情页，传递设备ID和名称
-    const pathInfo: NavPathInfo = {
-      name: "DeviceDetailPage",
-      param: { 
-        "deviceId": normalizedId,
-        "deviceName": deviceName
-      } as Record<string, string>
-    };
-
-    this.pageStack.pushPath(pathInfo);
-
   }
 }
 

@@ -1,11 +1,12 @@
 import { webSocket } from '@kit.NetworkKit';
 import { BusinessError } from '@kit.BasicServicesKit';
+import http from '@ohos.net.http';
 
 // 服务器地址配置
 export const SERVER_HOST = 'znhj.iepose.cn';
 
 // 传感器数据接口
-interface SensorData {
+export interface SensorData {
   ts?: number; // 时间戳
   temp?: number; // 温度
   hum?: number; // 湿度
@@ -82,6 +83,7 @@ export interface HomePageView {
   locationAvailable: boolean;
   // 图表更新方法
   updateCharts?: (timestamp: number, temp: number, hum: number, lux: number, smoke: number, pressure: number) => void;
+  loadHistoryToCharts?: (historyData: SensorData[]) => void;
 }
 
 // HomePage 业务逻辑类：负责 WebSocket 连接与数据解析、趋势计算等
@@ -519,9 +521,91 @@ export class DeviceDetailPageLogic {
     });
   }
 
-  // 页面即将显示：建立连接
+  // 加载历史数据
+  private async loadHistoryData(): Promise<void> {
+    try {
+      console.info(`开始加载设备 ${this.deviceId} 的历史数据...`);
+      const httpRequest: http.HttpRequest = http.createHttp();
+      const url: string = `http://${SERVER_HOST}/api/history?limit=100&device_id=${this.deviceId}`;
+      
+      const response: http.HttpResponse = await httpRequest.request(url, {
+        method: http.RequestMethod.GET,
+        header: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      httpRequest.destroy();
+
+      if (response && response.responseCode === 200) {
+        // 解析响应数据
+        const resultStr = response.result as string;
+        const result = JSON.parse(resultStr) as Record<string, Object>;
+        
+        if (result['success'] === true && result['data']) {
+          const dataArray = result['data'] as Array<Record<string, Object>>;
+          console.info(`成功获取 ${dataArray.length} 条历史数据`);
+          
+          // 转换为 SensorData 数组
+          const historyData: SensorData[] = [];
+          dataArray.forEach((item: Record<string, Object>) => {
+            if (item['type'] === 'reading') {
+              historyData.push({
+                ts: item['ts'] as number,
+                temp: item['temp'] as number,
+                hum: item['hum'] as number,
+                lux: item['lux'] as number,
+                smoke: item['smoke'] as number,
+                pressure: item['pressure'] as number,
+                temp2: item['temp2'] as number,
+                rs_ro: item['rs_ro'] as number
+              });
+            }
+          });
+          
+          console.info(`转换了 ${historyData.length} 条有效数据`);
+          
+          // 先设置样本数（避免updateSensorData时从0开始）
+          this.view.sampleCount = historyData.length;
+          
+          // 批量更新UI（只更新最后一条数据的显示，但不再递增sampleCount）
+          if (historyData.length > 0) {
+            const lastData = historyData[historyData.length - 1];
+            // 临时保存当前样本数
+            const currentCount = this.view.sampleCount;
+            this.updateSensorData(lastData);
+            // 恢复样本数（因为updateSensorData会+1）
+            this.view.sampleCount = currentCount;
+          }
+          
+          // 将数据加载到图表
+          if (this.view.loadHistoryToCharts) {
+            this.view.loadHistoryToCharts(historyData);
+          }
+          
+          console.info(`样本数已设置为: ${this.view.sampleCount}`);
+        } else {
+          console.warn('历史数据加载失败或无数据');
+        }
+      } else {
+        console.error(`HTTP请求失败，状态码: ${response?.responseCode}`);
+      }
+    } catch (err) {
+      console.error('加载历史数据失败:', err);
+    }
+  }
+
+  // 页面即将显示：先加载历史数据，再建立WebSocket连接
   aboutToAppear(): void {
-    this.connectWebSocket();
+    // 先加载历史数据
+    this.loadHistoryData().then(() => {
+      console.info('历史数据加载完成，开始连接WebSocket');
+      // 再建立WebSocket连接接收实时数据
+      this.connectWebSocket();
+    }).catch(() => {
+      console.error('历史数据加载失败，仍然连接WebSocket');
+      this.connectWebSocket();
+    });
   }
 
   // 页面即将隐藏：清理连接与定时器
