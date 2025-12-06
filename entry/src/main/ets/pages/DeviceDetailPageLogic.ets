@@ -15,6 +15,7 @@ export interface SensorData {
   pressure?: number; // 气压
   temp2?: number; // 温度2
   rs_ro?: number; // 气体传感器比值
+  device_id?: string; // 设备ID（用于多设备分析）
 }
 
 // WebSocket 消息接口
