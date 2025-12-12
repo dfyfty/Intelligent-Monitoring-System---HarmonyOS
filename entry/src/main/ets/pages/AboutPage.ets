@@ -15,15 +15,45 @@ export struct AboutPage {
   // 更新日志数据
   private changeLogs: MyLogs[] = [
     {
-      version: 'Version 1.0.4',
-      date: '2025.12.9',
-      desc: '重写了 /api/status 的判断逻辑，解放前端压力。',
+      version: 'Beta 4',
+      date: '2025.12.12',
+      desc: '加入了“消息”和“关于”页面，同时重构了整个WebSocket独立成文件，现在整个软件在后端视为一个WS连接。',
       isLatest: true
     },
     {
-      version: 'Version 1.0.3',
+      version: 'Beta 3',
+      date: '2025.12.8',
+      desc: '加入了“控制”页面，调用后端控制API。',
+      isLatest: false
+    },
+    {
+      version: 'Beta 2.2',
+      date: '2025.12.6',
+      desc: '加入“AI 分析”，调用后端API实现与DeepSeek通信。',
+      isLatest: false
+    },
+    {
+      version: 'Beta 2.1',
+      date: '2025.12.5',
+      desc: '开始接入后端API，接入了加载数据库数据的API，可以回看100条数据。',
+      isLatest: false
+    },
+    {
+      version: 'Beta 2',
+      date: '2025.12.4',
+      desc: '加入Navigation管理路由，支持多设备传感器界面，对应Web版正式版本。',
+      isLatest: false
+    },
+    {
+      version: 'Beta 1.1',
       date: '2025.11.20',
-      desc: '新增消息中心筛选功能，优化移动端布局。',
+      desc: '添加了地图功能。由于申请鸿蒙APPid迟迟未通过，使用的是高德地图JS API实现，没错就是嵌入了网页。',
+      isLatest: false
+    },
+    {
+      version: 'Beta 1',
+      date: '2025.11.9',
+      desc: '对接后端WebSocket，完成了对单设备的数据监测功能。',
       isLatest: false
     }
   ];
@@ -99,7 +129,12 @@ export struct AboutPage {
               .fontSize(13)
               .fontColor($r('app.color.home_title_text'))
               .lineHeight(20)
-              .textAlign(TextAlign.Start)
+              .textAlign(TextAlign.JUSTIFY)
+            Text("➡️这是本项目前端的HarmonyOS，基于最新HarmonyOS6.0(API20)，开发组件使用了@CompentV2实现，并嵌入Chart.JS绘制图表。")
+              .fontSize(13)
+              .fontColor($r('app.color.home_title_text'))
+              .lineHeight(20)
+              .textAlign(TextAlign.JUSTIFY)
               .margin({ bottom: 16 })
 
             // 技术栈标签

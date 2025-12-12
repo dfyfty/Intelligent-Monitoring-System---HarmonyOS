@@ -37,7 +37,7 @@ export struct ControlPage {
   public readonly normalColor: string = "#999999"; // 未选中颜色
   
   // 开关状态
-  @Local bleEnabled: boolean = false;
+  @Local bleEnabled: boolean = true;
   @Local oledEnabled: boolean = true;
   
   // 设备选择相关
