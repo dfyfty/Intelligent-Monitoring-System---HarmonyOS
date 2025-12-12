@@ -3,6 +3,7 @@ import { AnalysisPage } from './AnalysisPage';
 import { webview } from '@kit.ArkWeb';
 import { ControlPage } from './ControlPage';
 import { MessagePage } from './MessagePage';
+import { AboutPage } from './AboutPage';
 
 @Entry
 @ComponentV2
@@ -64,7 +65,7 @@ struct Index {
 
         // 5. 关于
         TabContent() {
-          Text("关于页内容").fontSize(30)
+          AboutPage()
         }
         .tabBar(this.TabBuilder("关于", 4, $r("app.media.ic_about")))
       }

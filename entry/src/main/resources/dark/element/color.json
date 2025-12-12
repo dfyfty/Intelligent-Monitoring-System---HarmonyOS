@@ -59,6 +59,66 @@
     {
       "name": "card_shadow",
       "value": "#00000020"
+    },
+    {
+      "name": "about_primary_blue",
+      "value": "#5B7FFF"
+    },
+    {
+      "name": "about_text_secondary",
+      "value": "#9CA3AF"
+    },
+    {
+      "name": "about_text_tertiary",
+      "value": "#6B7280"
+    },
+    {
+      "name": "about_text_dark",
+      "value": "#D1D5DB"
+    },
+    {
+      "name": "about_bg_light",
+      "value": "#1F2937"
+    },
+    {
+      "name": "about_bg_image",
+      "value": "#1E3A5F"
+    },
+    {
+      "name": "about_border_light",
+      "value": "#374151"
+    },
+    {
+      "name": "about_timeline_dot",
+      "value": "#4B5563"
+    },
+    {
+      "name": "about_timeline_line",
+      "value": "#374151"
+    },
+    {
+      "name": "about_icon_orange",
+      "value": "#FB923C"
+    },
+    {
+      "name": "about_error_red",
+      "value": "#EF4444"
+    },
+    {
+      "name": "about_error_bg",
+      "value": "#3F1F1F"
+    },
+    {
+      "name": "about_blue_alpha",
+      "value": "#5B7FFF33"
+    },
+    {
+      "name": "about_shadow_light",
+      "value": "#00000040"
+    },
+    {
+      "name": "about_shadow_medium",
+      "value": "#00000030"
     }
   ]
 }

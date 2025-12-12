@@ -298,9 +298,11 @@ export struct ControlPage {
                   if (!device.online) {
                     Text("离线")
                       .fontSize(10)
-                      .fontColor("#EF4444")
+                      .fontColor("#DC2626")
                       .padding({ left: 4, right: 4, top: 2, bottom: 2 })
-                      .backgroundColor("#FEE2E2")
+                      .backgroundColor($r("app.color.offline_state_bgc"))
+                      .borderColor("#DC2626")
+                      .borderWidth(1)
                       .borderRadius(4)
                   }
                 }

@@ -674,8 +674,8 @@ export struct MessagePage {
               top: 2,
               bottom: 2
             })
-            .backgroundColor(msg.status === '未恢复' ? "#FEF2F2" : "#F0FDF4")
-            .border({ width: 1, color: msg.status === '未恢复' ? "#FECACA" : "#DCFCE7" })
+            .backgroundColor(msg.status === '未恢复' ? $r("app.color.offline_state_bgc") : $r("app.color.online_state_bgc"))
+            .border({ width: 1, color: msg.status === '未恢复' ? "#DC2626" : "#16A34A" })
             .borderRadius(4)
         }
 
