@@ -130,7 +130,7 @@ export struct AboutPage {
               .fontColor($r('app.color.home_title_text'))
               .lineHeight(20)
               .textAlign(TextAlign.JUSTIFY)
-            Text("➡️这是本项目前端的HarmonyOS，基于最新HarmonyOS6.0(API20)，开发组件使用了@CompentV2实现，并嵌入Chart.JS绘制图表。")
+            Text("➡️这是本项目的HarmonyOS NEXT版本，基于最新HarmonyOS6.0(API20)，开发组件使用了@CompentV2实现，并嵌入Chart.JS绘制图表。")
               .fontSize(13)
               .fontColor($r('app.color.home_title_text'))
               .lineHeight(20)
