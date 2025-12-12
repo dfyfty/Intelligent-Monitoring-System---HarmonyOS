@@ -1,4 +1,5 @@
-import { SensorData, SERVER_HOST } from './DeviceDetailPageLogic';
+import { SensorData } from './DeviceDetailPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 import { DeviceInfo } from './DevicesPageLogic';
 import { AnalysisDataLoadComponent } from './AnalysisDataLoadComponent';
 import http from '@ohos.net.http';

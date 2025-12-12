@@ -1,9 +1,5 @@
-import { webSocket } from '@kit.NetworkKit';
 import { http } from '@kit.NetworkKit';
-import { BusinessError } from '@kit.BasicServicesKit';
-
-// 服务器地址配置
-export const SERVER_HOST = 'znhj.iepose.cn';
+import { WebSocketManager, WebSocketMessageCallback, SERVER_HOST } from './WebSocketManager';
 
 // 设备信息接口
 export interface DeviceInfo {
@@ -59,14 +55,6 @@ export interface DevicesPageViewCallbacks {
 // 设备离线超时时间(秒)
 const DEVICE_OFFLINE_TIMEOUT = 10;
 
-// 检查是否有真正的错误
-function hasError(err: BusinessError | null | undefined): boolean {
-  if (!err) {
-    return false;
-  }
-  return !!(err.code || err.message || err.name || err.data);
-}
-
 // 规范化设备ID
 function normalizeDeviceId(id: string | undefined): string {
   if (!id) return '';
@@ -80,13 +68,9 @@ export class DevicesPageLogic {
   private realtimeData: Map<string, DeviceRealtimeData> = new Map();
   private warnings: Map<string, DeviceWarning> = new Map();
   private deviceLastSeen: Map<string, number> = new Map();
-  private ws: webSocket.WebSocket | null = null;
-  private reconnectTimer: number | null = null;
-  private isReconnecting: boolean = false;
-  private reconnectCount: number = 0;
-  private readonly MAX_RECONNECT_COUNT = 10;
   private deviceStatusCheckInterval: number | null = null;
-  private wsConnected: boolean = false;
+  private wsManager: WebSocketManager = WebSocketManager.getInstance();
+  private wsCallback: WebSocketMessageCallback | null = null;
 
   constructor(callbacks: DevicesPageViewCallbacks) {
     this.callbacks = callbacks;
@@ -206,129 +190,6 @@ export class DevicesPageLogic {
     this.updateDeviceCounts();
   }
 
-  // 自动重连机制
-  private scheduleReconnect(): void {
-    if (this.isReconnecting) {
-      return;
-    }
-
-    if (this.reconnectCount >= this.MAX_RECONNECT_COUNT) {
-      console.error(`已达到最大重连次数 ${this.MAX_RECONNECT_COUNT}，停止重连`);
-      return;
-    }
-
-    this.reconnectCount++;
-    this.isReconnecting = true;
-    console.info(`1.5 秒后尝试重新连接... (第 ${this.reconnectCount} 次)`);
-
-    const timerId = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.wsConnected) {
-        console.info('开始重连 WebSocket...');
-        this.connectWebSocket();
-      }
-    }, 1500);
-    // setTimeout 返回 number 类型，直接赋值
-    this.reconnectTimer = timerId as number;
-  }
-
-  // 建立 WebSocket 连接
-  private connectWebSocket(): void {
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    if (this.ws) {
-      try {
-        this.ws.close((err: BusinessError) => {
-          if (hasError(err)) {
-            console.warn('关闭旧连接时出错:', JSON.stringify(err));
-          }
-        });
-      } catch (e) {
-        console.warn('关闭旧连接时异常:', e);
-      }
-      this.ws = null;
-    }
-
-    this.wsConnected = false;
-    this.callbacks.onWsConnectedChanged(false);
-    this.isReconnecting = false;
-
-    this.ws = webSocket.createWebSocket();
-
-    this.ws.on('open', (err: BusinessError) => {
-      if (hasError(err)) {
-        console.error('WebSocket 打开失败:', JSON.stringify(err));
-        this.wsConnected = false;
-        this.callbacks.onWsConnectedChanged(false);
-        this.scheduleReconnect();
-        return;
-      }
-
-      console.info('WebSocket 连接成功');
-      this.wsConnected = true;
-      this.callbacks.onWsConnectedChanged(true);
-      this.isReconnecting = false;
-      this.reconnectCount = 0;
-    });
-
-    this.ws.on('message', (err: BusinessError, value: string | ArrayBuffer) => {
-      if (hasError(err)) {
-        console.error('接收消息失败:', JSON.stringify(err));
-        return;
-      }
-
-      try {
-        const msg: WebSocketMessage = JSON.parse(value as string) as WebSocketMessage;
-        this.handleWebSocketMessage(msg);
-      } catch (parseError) {
-        console.error('解析消息失败:', parseError);
-      }
-    });
-
-    this.ws.on('close', (_err: BusinessError, value: webSocket.CloseResult) => {
-      console.info('WebSocket 连接关闭, code:', value.code, ', reason:', value.reason);
-      this.wsConnected = false;
-      this.callbacks.onWsConnectedChanged(false);
-
-      if (!this.isReconnecting && value.code !== 1000) {
-        console.info('检测到异常关闭，将尝试重连');
-        this.scheduleReconnect();
-      } else if (value.code === 1000) {
-        console.info('正常关闭连接，不重连');
-        this.reconnectCount = 0;
-      }
-    });
-
-    this.ws.on('error', (err: BusinessError) => {
-      if (hasError(err)) {
-        console.error('WebSocket 错误:', JSON.stringify(err));
-        this.wsConnected = false;
-        this.callbacks.onWsConnectedChanged(false);
-
-        if (!this.isReconnecting) {
-          this.scheduleReconnect();
-        }
-      }
-    });
-
-    const url = `ws://${SERVER_HOST}/ws`;
-    console.info('正在连接 WebSocket:', url);
-
-    this.ws.connect(url, (err: BusinessError) => {
-      if (hasError(err)) {
-        console.error('WebSocket 连接失败:', JSON.stringify(err));
-        this.wsConnected = false;
-        this.callbacks.onWsConnectedChanged(false);
-        this.scheduleReconnect();
-      } else {
-        console.info('WebSocket 连接请求已发送');
-      }
-    });
-  }
-
   // 加载设备列表
   async loadDevices(): Promise<void> {
     const httpRequest = http.createHttp();
@@ -393,13 +254,59 @@ export class DevicesPageLogic {
   // 页面即将显示
   aboutToAppear(): void {
     this.loadDevices();
-    this.connectWebSocket();
+    this.setupWebSocketManager();
     // 启动设备状态检查定时器，每5秒检查一次
     const intervalId = setInterval(() => {
       this.checkAllDevicesStatus();
     }, 5000);
     // setInterval 返回 number 类型，直接赋值
     this.deviceStatusCheckInterval = intervalId as number;
+  }
+
+  // 设置WebSocketManager（统一管理WebSocket连接）
+  private setupWebSocketManager(): void {
+    // 创建回调对象
+    this.wsCallback = {
+      onReading: (msg) => {
+        const payload: WebSocketMessage = {
+          type: msg.type,
+          device_id: msg.device_id,
+          temp: msg.temp,
+          hum: msg.hum,
+          temp2: msg.temp2,
+          ts: msg.ts
+        };
+        this.handleReadingMessage(payload);
+      },
+      onWarning: (msg) => {
+        const payload: WebSocketMessage = {
+          type: 'warning',
+          device_id: msg.device_id,
+          warning_name: msg.warning_name,
+          warning_value: msg.warning_value,
+          warning_unit: msg.warning_unit
+        };
+        this.handleWarningMessage(payload);
+      },
+      onWarningResolved: (deviceId: string) => {
+        const payload: WebSocketMessage = {
+          type: 'warning_resolved',
+          device_id: deviceId
+        };
+        this.handleResolvedMessage(payload);
+      },
+      onConnected: (connected: boolean) => {
+        this.callbacks.onWsConnectedChanged(connected);
+      }
+    };
+
+    // 订阅WebSocket消息
+    this.wsManager.subscribe(this.wsCallback);
+
+    // 确保WebSocket已连接（如果未连接则连接）
+    if (!this.wsManager.isConnected()) {
+      this.wsManager.connect();
+    }
   }
 
   // 页面即将隐藏
@@ -410,26 +317,10 @@ export class DevicesPageLogic {
       this.deviceStatusCheckInterval = null;
     }
 
-    // 停止自动重连
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.isReconnecting = true;
-    this.reconnectCount = 0;
-
-    // 断开 WebSocket 连接
-    if (this.ws) {
-      this.ws.close((err: BusinessError) => {
-        if (hasError(err)) {
-          console.error('关闭连接失败:', JSON.stringify(err));
-        } else {
-          console.info('连接已关闭');
-        }
-        this.ws = null;
-        this.wsConnected = false;
-        this.callbacks.onWsConnectedChanged(false);
-      });
+    // 取消订阅WebSocket消息（但不断开连接，因为MessagePage可能还在使用）
+    if (this.wsCallback) {
+      this.wsManager.unsubscribe(this.wsCallback);
+      this.wsCallback = null;
     }
   }
 }

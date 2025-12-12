@@ -1,6 +1,6 @@
 import { SensorInfo } from './ControlSensorPage';
 import { http } from '@kit.NetworkKit';
-import { SERVER_HOST } from './DevicesPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 import promptAction from '@ohos.promptAction';
 import { switchSensor } from './ControlSensorPageLogic';
 

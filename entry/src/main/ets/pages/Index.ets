@@ -2,6 +2,7 @@ import { DevicesPage } from './DevicesPage';
 import { AnalysisPage } from './AnalysisPage';
 import { webview } from '@kit.ArkWeb';
 import { ControlPage } from './ControlPage';
+import { MessagePage } from './MessagePage';
 
 @Entry
 @ComponentV2
@@ -57,7 +58,7 @@ struct Index {
 
         // 4. 消息
         TabContent() {
-          Text("消息页内容").fontSize(30)
+          MessagePage()
         }
         .tabBar(this.TabBuilder("消息", 3, $r("app.media.ic_message")))
 

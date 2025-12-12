@@ -1,6 +1,7 @@
 import http from '@ohos.net.http';
 import promptAction from '@ohos.promptAction';
-import { SensorData, SERVER_HOST } from './DeviceDetailPageLogic';
+import { SensorData } from './DeviceDetailPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 
 // 加载方式枚举
 export enum LoadMode {

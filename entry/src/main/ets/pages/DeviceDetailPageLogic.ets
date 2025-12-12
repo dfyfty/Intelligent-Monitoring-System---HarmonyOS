@@ -1,9 +1,5 @@
-import { webSocket } from '@kit.NetworkKit';
-import { BusinessError } from '@kit.BasicServicesKit';
 import http from '@ohos.net.http';
-
-// 服务器地址配置
-export const SERVER_HOST = 'znhj.iepose.cn';
+import { WebSocketManager, WebSocketMessageCallback, ReadingMessage, LocationMessage, SERVER_HOST } from './WebSocketManager';
 
 // 传感器数据接口
 export interface SensorData {
@@ -46,15 +42,6 @@ export interface TrendResult {
   direction: 'up' | 'down' | 'stable'; // 趋势方向
   value: number; // 变化量
   text: string; // 显示文本
-}
-
-// 检查是否有真正的错误（错误对象可能存在但属性为空）
-function hasError(err: BusinessError | null | undefined): boolean {
-  if (!err) {
-    return false;
-  }
-  // 检查错误对象的属性是否有值
-  return !!(err.code || err.message || err.name || err.data);
 }
 
 // HomePage 视图接口，仅包含需要由逻辑层更新的字段
@@ -106,12 +93,9 @@ export class DeviceDetailPageLogic {
   private readonly STABLE_THRESHOLD = 0; // 稳定阈值（设为0，只要有变化就显示趋势）
   private lastDataTimestamp: number = 0; // 上次数据时间戳
 
-  // WebSocket 连接管理
-  private ws: webSocket.WebSocket | null = null;
-  private reconnectTimer: number | null = null;
-  private isReconnecting: boolean = false;
-  private reconnectCount: number = 0;
-  private readonly MAX_RECONNECT_COUNT = 10;
+  // WebSocket 连接管理（复用全局WebSocketManager）
+  private wsManager: WebSocketManager = WebSocketManager.getInstance();
+  private wsCallback: WebSocketMessageCallback | null = null;
 
   constructor(view: HomePageView, deviceId: string = '') {
     this.view = view;
@@ -320,22 +304,8 @@ export class DeviceDetailPageLogic {
     console.info('更新完成 - temp:', this.view.temp, 'hum:', this.view.hum, 'sampleCount:', this.view.sampleCount);
   }
 
-  // 处理 WebSocket 消息
-  private handleWebSocketMessage(msg: WebSocketMessage): void {
-    if (!msg || !msg.type) {
-      console.warn('收到未知格式的消息:', msg);
-      return;
-    }
-
-    // 打印原始消息用于调试
-    console.info('收到WebSocket消息:', JSON.stringify(msg));
-
-    // 处理连接成功消息
-    if (msg.type === 'hello') {
-      console.info('收到服务器连接确认消息');
-      return;
-    }
-
+  // 处理传感器读数消息
+  private handleReadingMessage(msg: ReadingMessage): void {
     // 过滤设备ID：只处理当前设备的消息
     const msgDeviceId = msg.device_id ? msg.device_id.trim().toUpperCase() : '';
     
@@ -345,181 +315,85 @@ export class DeviceDetailPageLogic {
       return;
     }
 
-    // 处理警告通知
-    if (msg.type === 'warning') {
-      console.warn('收到警告消息:', msg);
-      return;
-    }
-
-    // 处理恢复通知
-    if (msg.type === 'warning_resolved') {
-      console.info('收到恢复消息:', msg);
-      return;
-    }
-
-    // 处理定位数据
-    if (msg.type === 'location') {
-      console.info('收到定位数据:', msg);
-      this.updateLocationInfo(msg);
-      return;
-    }
-
-    // 处理传感器读数数据
-    if (msg.type === 'reading') {
-      const sensorData: SensorData = {
-        ts: msg.ts,
-        temp: msg.temp,
-        hum: msg.hum,
-        lux: msg.lux,
-        smoke: msg.smoke,
-        pressure: msg.pressure,
-        temp2: msg.temp2,
-        rs_ro: msg.rs_ro
-      };
-      this.updateSensorData(sensorData);
-      return;
-    }
-
-    console.warn('未处理的消息类型:', msg.type);
+    // 转换为SensorData格式
+    const sensorData: SensorData = {
+      ts: msg.ts,
+      temp: msg.temp,
+      hum: msg.hum,
+      lux: msg.lux,
+      smoke: msg.smoke,
+      pressure: msg.pressure,
+      temp2: msg.temp2,
+      rs_ro: msg.rs_ro,
+      device_id: msg.device_id
+    };
+    this.updateSensorData(sensorData);
   }
 
-  // 自动重连机制
-  private scheduleReconnect(): void {
-    if (this.isReconnecting) {
+  // 处理定位数据
+  private handleLocationMessage(msg: LocationMessage): void {
+    // 过滤设备ID
+    const msgDeviceId = msg.device_id ? msg.device_id.trim().toUpperCase() : '';
+    if (msgDeviceId && msgDeviceId !== this.deviceId) {
+      console.info(`跳过其他设备的定位消息: ${msgDeviceId} (当前设备: ${this.deviceId})`);
       return;
     }
-
-    if (this.reconnectCount >= this.MAX_RECONNECT_COUNT) {
-      console.error(`已达到最大重连次数 ${this.MAX_RECONNECT_COUNT}，停止重连`);
-      return;
-    }
-
-    this.reconnectCount++;
-    this.isReconnecting = true;
-    console.info(`1.5 秒后尝试重新连接... (第 ${this.reconnectCount} 次)`);
-
-    const timerId = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.view.wsConnected) {
-        console.info('开始重连 WebSocket...');
-        this.connectWebSocket();
-      }
-    }, 1500);
-    this.reconnectTimer = timerId as number;
+    // 转换为WebSocketMessage格式以兼容updateLocationInfo方法
+    const wsMsg: WebSocketMessage = {
+      type: msg.type,
+      device_id: msg.device_id,
+      lon: msg.lon,
+      lat: msg.lat,
+      utc: msg.utc,
+      csq: msg.csq,
+      iccid: msg.iccid,
+      imei: msg.imei,
+      location_type: msg.location_type
+    };
+    this.updateLocationInfo(wsMsg);
   }
 
-  // 建立 WebSocket 连接
-  private connectWebSocket(): void {
-    // 如果正在重连，先清除定时器
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-
-    // 如果已有连接，先关闭
-    if (this.ws) {
-      try {
-        this.ws.close((err: BusinessError, value: boolean) => {
-          if (hasError(err)) {
-            console.warn('关闭旧连接时出错:', JSON.stringify(err));
-          }
-        });
-      } catch (e) {
-        console.warn('关闭旧连接时异常:', e);
-      }
-      this.ws = null;
-    }
-
-    // 更新连接状态为未连接
-    this.view.wsConnected = false;
-    this.isReconnecting = false;
-
-    // 创建 WebSocket 对象
-    this.ws = webSocket.createWebSocket();
-
-    // 订阅 WebSocket 打开事件
-    this.ws.on('open', (err: BusinessError, value: Object) => {
-      if (hasError(err)) {
-        console.error('WebSocket 打开失败:', JSON.stringify(err));
-        this.view.wsConnected = false;
-        this.scheduleReconnect();
-        return;
-      }
-
-      console.info('WebSocket 连接成功');
-      this.view.wsConnected = true;
-      this.isReconnecting = false;
-      this.reconnectCount = 0;
-      // 连接成功后等待定位推送
-      this.view.locationStatus = '等待定位数据';
-      this.view.locationStatusColor = '#f59e0b';
-      this.view.locationLon = '--';
-      this.view.locationLat = '--';
-      this.view.locationExtra = '';
-      this.view.locationAvailable = false;
-    });
-
-    // 订阅消息接收事件
-    this.ws.on('message', (err: BusinessError, value: string | ArrayBuffer) => {
-      if (hasError(err)) {
-        console.error('接收消息失败:', JSON.stringify(err));
-        return;
-      }
-
-      try {
-        // 解析 JSON 消息
-        const msg: WebSocketMessage = JSON.parse(value as string) as WebSocketMessage;
-        this.handleWebSocketMessage(msg);
-      } catch (parseError) {
-        console.error('解析消息失败:', parseError);
-      }
-    });
-
-    // 订阅关闭事件
-    this.ws.on('close', (err: BusinessError, value: webSocket.CloseResult) => {
-      console.info('WebSocket 连接关闭, code:', value.code, ', reason:', value.reason);
-      this.view.wsConnected = false;
-      this.view.locationStatus = '定位未连接';
-      this.view.locationStatusColor = '#9ca3af';
-      this.view.locationLon = '--';
-      this.view.locationLat = '--';
-      this.view.locationExtra = '';
-      this.view.locationAvailable = false;
-
-      if (!this.isReconnecting && value.code !== 1000) {
-        console.info('检测到异常关闭，将尝试重连');
-        this.scheduleReconnect();
-      } else if (value.code === 1000) {
-        console.info('正常关闭连接，不重连');
-        this.reconnectCount = 0;
-      }
-    });
-
-    // 订阅错误事件
-    this.ws.on('error', (err: BusinessError) => {
-      if (hasError(err)) {
-        console.error('WebSocket 错误:', JSON.stringify(err));
-        this.view.wsConnected = false;
-
-        if (!this.isReconnecting) {
-          this.scheduleReconnect();
+  // 设置WebSocketManager（复用全局WebSocket连接）
+  private setupWebSocketManager(): void {
+    // 创建回调对象
+    this.wsCallback = {
+      onReading: (msg: ReadingMessage) => {
+        this.handleReadingMessage(msg);
+      },
+      onLocation: (msg: LocationMessage) => {
+        this.handleLocationMessage(msg);
+      },
+      onConnected: (connected: boolean) => {
+        this.view.wsConnected = connected;
+        if (connected) {
+          // 连接成功后等待定位推送
+          this.view.locationStatus = '等待定位数据';
+          this.view.locationStatusColor = '#f59e0b';
+          this.view.locationLon = '--';
+          this.view.locationLat = '--';
+          this.view.locationExtra = '';
+          this.view.locationAvailable = false;
+        } else {
+          this.view.locationStatus = '定位未连接';
+          this.view.locationStatusColor = '#9ca3af';
+          this.view.locationLon = '--';
+          this.view.locationLat = '--';
+          this.view.locationExtra = '';
+          this.view.locationAvailable = false;
         }
       }
-    });
+    };
 
-    // 发起连接，拼接ws服务器地址
-    const url = `ws://${SERVER_HOST}/ws`;
-    console.info('正在连接 WebSocket:', url);
+    // 订阅WebSocket消息
+    this.wsManager.subscribe(this.wsCallback);
 
-    this.ws.connect(url, (err: BusinessError, value: boolean) => {
-      if (hasError(err)) {
-        console.error('WebSocket 连接失败:', JSON.stringify(err));
-        this.view.wsConnected = false;
-        this.scheduleReconnect();
-      } else {
-        console.info('WebSocket 连接请求已发送');
-      }
-    });
+    // 确保WebSocket已连接（如果未连接则连接）
+    if (!this.wsManager.isConnected()) {
+      this.wsManager.connect();
+    } else {
+      // 如果已连接，立即更新连接状态
+      this.view.wsConnected = true;
+    }
   }
 
   // 加载历史数据
@@ -596,40 +470,25 @@ export class DeviceDetailPageLogic {
     }
   }
 
-  // 页面即将显示：先加载历史数据，再建立WebSocket连接
+  // 页面即将显示：先加载历史数据，再订阅WebSocket消息
   aboutToAppear(): void {
     // 先加载历史数据
     this.loadHistoryData().then(() => {
-      console.info('历史数据加载完成，开始连接WebSocket');
-      // 再建立WebSocket连接接收实时数据
-      this.connectWebSocket();
+      console.info('历史数据加载完成，开始订阅WebSocket消息');
+      // 再订阅WebSocket消息接收实时数据
+      this.setupWebSocketManager();
     }).catch(() => {
-      console.error('历史数据加载失败，仍然连接WebSocket');
-      this.connectWebSocket();
+      console.error('历史数据加载失败，仍然订阅WebSocket消息');
+      this.setupWebSocketManager();
     });
   }
 
-  // 页面即将隐藏：清理连接与定时器
+  // 页面即将隐藏：取消订阅（但不断开连接，因为其他页面可能还在使用）
   aboutToDisappear(): void {
-    // 停止自动重连
-    if (this.reconnectTimer !== null) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.isReconnecting = true; // 标记为主动断开，不自动重连
-    this.reconnectCount = 0;
-
-    // 断开 WebSocket 连接
-    if (this.ws) {
-      this.ws.close((err: BusinessError, value: boolean) => {
-        if (hasError(err)) {
-          console.error('关闭连接失败:', JSON.stringify(err));
-        } else {
-          console.info('连接已关闭');
-        }
-        this.ws = null;
-        this.view.wsConnected = false;
-      });
+    // 取消订阅WebSocket消息
+    if (this.wsCallback) {
+      this.wsManager.unsubscribe(this.wsCallback);
+      this.wsCallback = null;
     }
   }
 }

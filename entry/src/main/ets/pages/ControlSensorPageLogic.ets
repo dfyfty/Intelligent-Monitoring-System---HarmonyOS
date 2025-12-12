@@ -1,5 +1,5 @@
 import { http } from '@kit.NetworkKit';
-import { SERVER_HOST } from './DevicesPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 
 // 传感器状态接口
 export interface SensorState {

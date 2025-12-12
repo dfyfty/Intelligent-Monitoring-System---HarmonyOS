@@ -1,7 +1,8 @@
 import http from '@ohos.net.http';
 import promptAction from '@ohos.promptAction';
 // 请确保这些引用路径在你项目中是正确的
-import { SensorData, SERVER_HOST } from './DeviceDetailPageLogic';
+import { SensorData } from './DeviceDetailPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 import { DeviceInfo } from './DevicesPageLogic';
 import { LoadMode, TimeUnit, LoadParams, DataLoadCallback } from './DataLoadComponent';
 

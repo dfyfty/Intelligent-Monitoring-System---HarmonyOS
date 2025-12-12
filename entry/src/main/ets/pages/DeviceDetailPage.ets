@@ -1,4 +1,5 @@
-import { DeviceDetailPageLogic, TrendResult, SERVER_HOST, SensorData } from './DeviceDetailPageLogic';
+import { DeviceDetailPageLogic, TrendResult, SensorData } from './DeviceDetailPageLogic';
+import { SERVER_HOST } from './WebSocketManager';
 import webview from '@ohos.web.webview';
 import http from '@ohos.net.http';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
